@@ -27,6 +27,15 @@ export const chatAPI = {
     const response = await api.get(`/chat/session/${sessionId}`);
     return response.data;
   },
+
+  scrapePrices: async (laptopName) => {
+    const response = await api.post('/scraper/prices', {
+      laptop_name: laptopName,
+    }, {
+      timeout: 60000, // 60 seconds — scraping takes time
+    });
+    return response.data;
+  },
 };
 
 export default api;

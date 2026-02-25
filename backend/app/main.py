@@ -1,44 +1,40 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 from app.config import get_settings
 from app.database import connect_to_mongo, close_mongo_connection
-from app.routes import chat
-from app.services.laptop_service import laptop_service
+from app.routes import chat, scraper
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    await connect_to_mongo()
-    await laptop_service.initialize()
-    yield
-    # Shutdown
-    await close_mongo_connection()
+app = FastAPI(title="Laptop Recommendation API")
 
-app = FastAPI(
-    title="Laptop Recommendation API",
-    version="1.0.0",
-    lifespan=lifespan
-)
+# CORS
+origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
+logger.info(f"Allowed CORS origins: {origins}")
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:5173"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(chat.router)
+@app.on_event("startup")
+async def startup():
+    await connect_to_mongo()  # laptop_service uses _get_db() so no initialize() needed
 
-@app.get("/")
-async def root():
-    return {"message": "Laptop Recommendation API is running!"}
+@app.on_event("shutdown")
+async def shutdown():
+    await close_mongo_connection()
+
+app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
+app.include_router(scraper.router, prefix="/api/scraper", tags=["scraper"])
 
 @app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
+async def health():
+    return {"status": "ok"}

@@ -1,17 +1,33 @@
 # Python
-backend/venv/
+venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# Environment variables - NEVER commit this
+.env
+.env.*
 
 # Node
-frontend/node_modules/
-frontend/dist/
+node_modules/
+dist/
+build/
 
-# Env files
-.env
-backend/.env
-frontend/.env
+# Selenium / testing artifacts
+*.html
+chromedriver*
+geckodriver*
 
-# OS files
+# OS
 .DS_Store
 Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log

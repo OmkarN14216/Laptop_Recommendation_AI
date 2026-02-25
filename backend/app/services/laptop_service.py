@@ -2,150 +2,111 @@ from app.database import get_database
 from typing import List, Dict, Optional
 import re
 import ast
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class LaptopService:
-    def __init__(self):
-        self.db = None
-    
-    async def initialize(self):
-        self.db = get_database()
-    
+
+    def _get_db(self):
+        """Get DB instance fresh every time — no stale None reference."""
+        db = get_database()
+        if db is None:
+            raise RuntimeError("Database not initialized. Check MongoDB connection.")
+        return db
+
     async def get_all_laptops(self) -> List[Dict]:
-        """Get all laptops from database"""
-        laptops = await self.db.laptops.find().to_list(length=None)
+        laptops = await self._get_db().laptops.find().to_list(length=None)
         for laptop in laptops:
             laptop['_id'] = str(laptop['_id'])
         return laptops
-    
+
     def extract_dictionary_from_string(self, string: str) -> Optional[Dict]:
-        """Extract dictionary from string"""
-        regex_pattern = r"\{[^{}]+\}"
-        dictionary_matches = re.findall(regex_pattern, string)
-        
-        if dictionary_matches:
+        """Kept for backward compatibility."""
+        match = re.search(r'\{[^{}]+\}', string, re.DOTALL)
+        if match:
             try:
-                dictionary_string = dictionary_matches[0]
-                dictionary_string = dictionary_string.lower()
-                dictionary = ast.literal_eval(dictionary_string)
-                return dictionary
+                return ast.literal_eval(match.group().lower())
             except Exception as e:
-                print(f"Error parsing dictionary: {e}")
-                return None
+                logger.error(f"Error parsing dictionary: {e}")
         return None
-    
-    async def compare_laptops_with_user(self, user_req_string: str) -> List[Dict]:
-        """Compare laptops with user requirements and return top 3"""
-        user_requirements = self.extract_dictionary_from_string(user_req_string)
-        
-        if not user_requirements:
-            print("❌ Could not extract user requirements")
+
+    async def compare_laptops_with_user(self, user_req: Dict) -> List[Dict]:
+        """Compare laptops with user requirements and return top 3."""
+        if not user_req:
+            logger.error("Empty user requirements")
             return []
-        
-        print(f"✅ User Requirements: {user_requirements}")
-        
-        # Extract budget
-        budget_str = str(user_requirements.get('budget', '0'))
-        budget = int(budget_str.replace(',', '').split()[0])
-        print(f"💰 Budget: ₹{budget}")
-        
-        # Get all laptops
+
+        logger.info(f"User Requirements: {user_req}")
+
+        # Parse budget — strip everything except digits
+        budget_str = str(user_req.get('budget', '0'))
+        digits = re.sub(r'[^\d]', '', budget_str)
+        budget = int(digits) if digits else 0
+        logger.info(f"Budget: ₹{budget}")
+
         all_laptops = await self.get_all_laptops()
-        print(f"📊 Total laptops in database: {len(all_laptops)}")
-        
-        # Filter by budget first
+        logger.info(f"Total laptops in database: {len(all_laptops)}")
+
+        # Filter by budget
         filtered_laptops = []
         for laptop in all_laptops:
             try:
                 laptop_price = int(str(laptop['price']).replace(',', ''))
                 if laptop_price <= budget:
                     filtered_laptops.append(laptop)
-            except Exception as e:
-                print(f"⚠️ Error parsing price for {laptop.get('brand', 'Unknown')}: {e}")
+            except Exception:
                 continue
-        
-        print(f"💵 Laptops within budget: {len(filtered_laptops)}")
-        
+
+        logger.info(f"Laptops within budget: {len(filtered_laptops)}")
+
         if not filtered_laptops:
-            print("❌ No laptops found within budget")
+            logger.warning("No laptops found within budget")
             return []
-        
-        # Mapping system: low=0, medium=1, high=2
-        mappings = {
-            'low': 0,
-            'medium': 1,
-            'high': 2
-        }
-        
-        # List of features to score (9 features, excluding budget)
+
+        mappings = {'low': 0, 'medium': 1, 'high': 2}
         scoreable_features = [
-            'gpu intensity',
-            'processing speed',
-            'ram capacity',
-            'storage capacity',
-            'storage type',
-            'display quality',
-            'display size',
-            'portability',
-            'battery life'
+            'gpu intensity', 'processing speed', 'ram capacity',
+            'storage capacity', 'storage type', 'display quality',
+            'display size', 'portability', 'battery life'
         ]
-        
-        # Score each laptop
-        print("\n🎯 Scoring laptops...")
+
         for laptop in filtered_laptops:
             score = 0
             laptop_feature = laptop.get('laptop_feature', {})
-            
-            # Check if laptop has features
+            match_details = {}
+
             if not laptop_feature:
-                print(f"⚠️ {laptop['brand']} {laptop['model_name']} - No features found")
                 laptop['score'] = 0
                 laptop['match_details'] = {}
                 continue
-            
-            match_details = {}
-            
-            # Calculate score for each feature
+
             for feature in scoreable_features:
-                user_value = user_requirements.get(feature, 'low')
-                laptop_value = laptop_feature.get(feature, 'low')
-                
-                # Convert to numeric
-                laptop_mapping = mappings.get(str(laptop_value).lower(), 0)
-                user_mapping = mappings.get(str(user_value).lower(), 0)
-                
-                # Check if laptop meets or exceeds requirement
-                meets_requirement = laptop_mapping >= user_mapping
-                
-                if meets_requirement:
+                user_val = str(user_req.get(feature, 'low')).lower()
+                laptop_val = str(laptop_feature.get(feature, 'low')).lower()
+
+                if mappings.get(laptop_val, 0) >= mappings.get(user_val, 0):
                     score += 1
-                    match_details[feature] = f"✅ {laptop_value} (need: {user_value})"
+                    match_details[feature] = f"✅ {laptop_val} (need: {user_val})"
                 else:
-                    match_details[feature] = f"❌ {laptop_value} (need: {user_value})"
-            
+                    match_details[feature] = f"❌ {laptop_val} (need: {user_val})"
+
             laptop['score'] = score
             laptop['match_details'] = match_details
-            
-            print(f"  {laptop['brand']} {laptop['model_name']}: Score {score}/9")
-        
-        # Sort by score (highest first)
-        filtered_laptops.sort(key=lambda x: x.get('score', 0), reverse=True)
-        
-        # Get top 3
-        top_laptops = filtered_laptops[:3]
-        
-        print(f"\n🏆 Top 3 laptops:")
-        for i, laptop in enumerate(top_laptops):
-            print(f"  {i+1}. {laptop['brand']} {laptop['model_name']} - Score: {laptop['score']}/9, Price: ₹{laptop['price']}")
-        
-        # Only return laptops with score >= 5 (meets at least 5 out of 9 requirements)
-        validated_laptops = [laptop for laptop in top_laptops if laptop.get('score', 0) >= 5]
-        
-        # If no laptops meet the threshold, return top 3 anyway with lower scores
-        if not validated_laptops and top_laptops:
-            print(f"⚠️ No laptops scored ≥5, returning top 3 with lower scores")
-            return top_laptops
-        
-        print(f"✅ Returning {len(validated_laptops)} validated laptops")
-        return validated_laptops
 
+        filtered_laptops.sort(key=lambda x: x.get('score', 0), reverse=True)
+        top_laptops = filtered_laptops[:3]
+
+        validated = [l for l in top_laptops if l.get('score', 0) >= 5]
+
+        if not validated and top_laptops:
+            logger.warning("No laptops scored ≥5, returning top 3 anyway")
+            return top_laptops
+
+        logger.info(f"Returning {len(validated)} laptops")
+        return validated
+
+
+logger.debug("laptop_service module loaded")
 laptop_service = LaptopService()
