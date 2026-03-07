@@ -16,3 +16,5 @@ services:
         sync: false
       - key: SCRAPING_ENABLED
         value: false
+      - key: PYTHON_VERSION
+        value: 3.11.9
