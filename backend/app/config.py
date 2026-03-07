@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     allowed_origins: str = "http://localhost:5173,http://localhost:5174"
 
+    # Scraping — set to false in cloud deployment (no Chrome available)
+    scraping_enabled: bool = True
+
     class Config:
         env_file = ".env"
 
