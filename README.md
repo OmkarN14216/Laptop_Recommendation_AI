@@ -7,15 +7,28 @@ An AI-powered full-stack laptop recommendation system. Chat with the bot, descri
 ![MongoDB](https://img.shields.io/badge/MongoDB-4EA94B?style=flat&logo=mongodb&logoColor=white)
 ![Groq](https://img.shields.io/badge/Groq-LLaMA_3.1-orange?style=flat)
 
+## 🌐 Live Demo
+
+| Service | URL |
+|---------|-----|
+| Frontend | https://laptop-recommendation-ai.vercel.app |
+| Backend API | https://laptop-recommendation-ai-1.onrender.com |
+| Health Check | https://laptop-recommendation-ai-1.onrender.com/health |
+| Swagger Docs | https://laptop-recommendation-ai-1.onrender.com/docs |
+
+> ⚠️ The backend is hosted on Render's free tier — it may take **30–50 seconds** to respond after inactivity. Please wait for the first response.
+
 ---
 
 ## ✨ Features
 
 - 🤖 AI chatbot collects 10 laptop requirements through natural conversation
 - 🎯 Scores all laptops in the database against your needs (0–9 per laptop)
-- 💰 Live price scraping from **Flipkart** and **Croma**
+- 💰 Live price scraping from **Flipkart** and **Croma** (local only — see note below)
 - 📊 Returns top 3 matches with specs, score, and direct buy links
 - ⚡ Fast inference via Groq API (LLaMA 3.1 8B)
+
+> 📝 **Note on scraping:** Live price scraping via Selenium runs locally only. Cloud deployment disables it due to free tier memory constraints — this is handled gracefully via a feature flag (`SCRAPING_ENABLED`).
 
 ---
 
@@ -23,7 +36,9 @@ An AI-powered full-stack laptop recommendation system. Chat with the bot, descri
 
 ```
 LaptopRecommendation/
+├── render.yaml                            # Render deployment config
 ├── backend/
+│   ├── .python-version                    # Pins Python 3.11 for deployment
 │   ├── app/
 │   │   ├── config.py                      # Environment variables
 │   │   ├── database.py                    # MongoDB connection
@@ -78,25 +93,26 @@ LaptopRecommendation/
 | HTTP Client | Axios |
 | Backend | FastAPI (Python) |
 | AI / LLM | Groq API — LLaMA 3.1 8B Instant |
-| Database | MongoDB |
+| Database | MongoDB Atlas |
 | Async DB Driver | Motor |
 | Sync DB Driver | PyMongo |
 | Validation | Pydantic v2 |
 | Scraping | Selenium + WebDriver Manager |
+| Deployment | Render (backend) + Vercel (frontend) |
 
 ---
 
 ## 🔑 Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - Node.js 18+
 - MongoDB (local) or MongoDB Atlas account
 - Groq API key → [console.groq.com](https://console.groq.com)
-- Google Chrome installed (required for Selenium scraping)
+- Google Chrome installed (required for Selenium scraping locally)
 
 ---
 
-## 🚀 Running the Project
+## 🚀 Running Locally
 
 ### 1. Clone the repo
 
@@ -116,6 +132,7 @@ GROQ_API_KEY=your_groq_api_key_here
 HOST=0.0.0.0
 PORT=8000
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174
+SCRAPING_ENABLED=true
 ```
 
 ### 3. Start MongoDB
@@ -128,7 +145,7 @@ net start MongoDB
 brew services start mongodb-community
 ```
 
-> If using MongoDB Atlas, skip this step and use your Atlas connection string in `.env`.
+> If using MongoDB Atlas, skip this and use your Atlas connection string in `.env`.
 
 ### 4. Start the backend
 
@@ -197,10 +214,10 @@ python generate_laptop_features.py
    Storage type, Display quality, Display size, Portability,
    Battery life, Budget (INR)
 3. Once all 10 are collected → bot outputs requirements dictionary
-4. Backend detects intent confirmation (pure Python, no extra LLM call)
+4. Backend detects intent confirmation (pure Python, no LLM call)
 5. All laptops within budget are scored 0–9
 6. Top 3 laptops returned with specs and match score
-7. Live prices scraped in parallel from Flipkart + Croma
+7. Live prices scraped in parallel from Flipkart + Croma (local only)
 8. Laptop cards displayed with prices and direct buy links
 ```
 
@@ -219,18 +236,10 @@ Max score = 9  |  Min accepted = 5
 
 ---
 
-## 🌐 URLs
-
-| Service | URL |
-|---------|-----|
-| Frontend | http://localhost:5173 |
-| Backend API | http://localhost:8000 |
-| Swagger Docs | http://localhost:8000/docs |
-| Health Check | http://localhost:8000/health |
-
----
-
 ## 🐛 Common Issues
+
+**Backend takes 30–50 seconds to respond**
+Render free tier sleeps after inactivity. Wait for the first response — it will be fast after that.
 
 **CORS error on frontend**
 Make sure `ALLOWED_ORIGINS` in `.env` includes your frontend port (5173 or 5174).
@@ -242,10 +251,10 @@ MongoDB isn't connected. Check `MONGODB_URL` in `.env` and ensure MongoDB is run
 Run `generate_laptop_features.py` — laptops need AI features to be scored.
 
 **404 on chat message after backend restart**
-Sessions are stored in memory. Refresh the frontend page to start a new session.
+Sessions are in-memory. Refresh the frontend page to start a new session.
 
 **Scraper returns no results**
-Google Chrome must be installed. WebDriver Manager auto-downloads the matching ChromeDriver.
+Google Chrome must be installed. Set `SCRAPING_ENABLED=true` in `.env`.
 
 **Bot asks too many / too few questions**
 Edit the system prompt in `backend/app/services/groq_service.py` → `initialize_conversation()`.
@@ -265,3 +274,4 @@ Edit the system prompt in `backend/app/services/groq_service.py` → `initialize
 | `frontend/src/components/ChatInterface.jsx` | Main UI logic |
 | `frontend/src/components/LaptopCard.jsx` | Laptop card design |
 | `frontend/src/services/api.js` | Backend URL config |
+| `render.yaml` | Render deployment configuration |
